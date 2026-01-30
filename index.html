@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Line-Tracker Push-Up Counter</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; background: #1a1a1a; color: white; margin: 0; }
+        #container { position: relative; margin-top: 20px; border: 4px solid #333; line-height: 0; }
+        canvas { position: absolute; left: 0; top: 0; }
+        .controls { background: #222; padding: 15px; border-radius: 0 0 10px 10px; display: flex; gap: 20px; width: 614px; justify-content: center; }
+        .stat-box { text-align: center; }
+        #counter { font-size: 3rem; font-weight: bold; color: #00ff88; display: block; }
+        .label { font-size: 0.8rem; color: #aaa; text-transform: uppercase; }
+        #status { font-weight: bold; color: #ffcc00; }
+    </style>
+</head>
+<body>
+
+    <div id="container">
+        <video id="video" width="640" height="480" autoplay playsinline muted></video>
+        <canvas id="output"></canvas>
+    </div>
+
+    <div class="controls">
+        <div class="stat-box">
+            <span class="label">Status</span>
+            <div id="status">Aligning...</div>
+        </div>
+        <div class="stat-box">
+            <span class="label">Reps</span>
+            <div id="counter">0</div>
+        </div>
+    </div>
+
+    <script>
+        let detector;
+        let count = 0;
+        let stage = "up"; 
+        
+        // Define line heights (Y-coordinates)
+        // Adjust these if you are further/closer to the camera
+        const UP_LINE_Y = 220;   // The "Rest" height (Shoulder blade area)
+        const DOWN_LINE_Y = 350; // The "Target" depth (Chest area)
+
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('output');
+        const ctx = canvas.getContext('2d');
+
+        async function main() {
+            detector = await poseDetection.createDetector(
+                poseDetection.SupportedModels.MoveNet,
+                { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING }
+            );
+            
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+            video.srcObject = stream;
+            video.onloadedmetadata = () => {
+                canvas.width = video.width;
+                canvas.height = video.height;
+                detectPose();
+            };
+        }
+
+        async function detectPose() {
+            const poses = await detector.estimatePoses(video);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw the Goal Lines
+            drawGuideLines();
+
+            if (poses.length > 0) {
+                const keypoints = poses[0].keypoints;
+                const leftShoulder = keypoints.find(k => k.name === 'left_shoulder');
+                const rightShoulder = keypoints.find(k => k.name === 'right_shoulder');
+
+                if (leftShoulder.score > 0.5 && rightShoulder.score > 0.5) {
+                    const avgShoulderY = (leftShoulder.y + rightShoulder.y) / 2;
+
+                    // Visualization of current shoulder position
+                    ctx.fillStyle = "white";
+                    ctx.beginPath();
+                    ctx.arc((leftShoulder.x + rightShoulder.x)/2, avgShoulderY, 8, 0, 2 * Math.PI);
+                    ctx.fill();
+
+                    // Logic using the lines
+                    if (avgShoulderY > DOWN_LINE_Y) {
+                        if (stage !== "down") {
+                            stage = "down";
+                            document.getElementById('status').innerText = "PUSH UP!";
+                        }
+                    }
+                    
+                    if (avgShoulderY < UP_LINE_Y && stage === "down") {
+                        stage = "up";
+                        count++;
+                        document.getElementById('counter').innerText = count;
+                        document.getElementById('status').innerText = "LOWER DOWN";
+                    }
+                }
+            }
+            requestAnimationFrame(detectPose);
+        }
+
+        function drawGuideLines() {
+            // Top Line (Up Phase)
+            ctx.strokeStyle = "#00bfff";
+            ctx.lineWidth = 3;
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(0, UP_LINE_Y);
+            ctx.lineTo(canvas.width, UP_LINE_Y);
+            ctx.stroke();
+            ctx.fillStyle = "#00bfff";
+            ctx.fillText("UP LINE (SHOULDERS)", 10, UP_LINE_Y - 10);
+
+            // Bottom Line (Down Phase)
+            ctx.strokeStyle = "#ff4444";
+            ctx.setLineDash([]);
+            ctx.beginPath();
+            ctx.moveTo(0, DOWN_LINE_Y);
+            ctx.lineTo(canvas.width, DOWN_LINE_Y);
+            ctx.stroke();
+            ctx.fillStyle = "#ff4444";
+            ctx.fillText("DOWN LINE (CHEST)", 10, DOWN_LINE_Y - 10);
+        }
+
+        main();
+    </script>
+</body>
+</html>
