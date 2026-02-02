@@ -3,39 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>60s AI Push-Up Challenge</title>
+    <title>AI Push-Up Pro: Manual Calibration</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
     <style>
-        body { 
-            font-family: 'Segoe UI', system-ui, sans-serif; background: #000; color: white; margin: 0; 
-            display: flex; flex-direction: column; align-items: center; overflow: hidden;
-        }
+        body { font-family: 'Segoe UI', sans-serif; background: #000; color: white; margin: 0; display: flex; flex-direction: column; align-items: center; overflow: hidden; }
         #container { position: relative; width: 100vw; max-width: 640px; aspect-ratio: 4/3; background: #111; }
         video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
         
-        .ui-panel {
-            width: 100%; max-width: 640px; padding: 15px; background: #1a1a1a; 
-            display: flex; flex-direction: column; align-items: center; border-radius: 0 0 20px 20px; box-sizing: border-box;
-        }
-        .stats-row { display: flex; width: 100%; justify-content: space-around; align-items: center; margin: 10px 0; }
-        .stat-item { text-align: center; }
-        .stat-value { font-size: 48px; font-weight: 800; color: #00ff88; line-height: 1; }
-        .stat-label { font-size: 12px; color: #888; text-transform: uppercase; margin-top: 5px; }
-        
+        .ui-panel { width: 100%; max-width: 640px; padding: 20px; background: #1a1a1a; display: flex; flex-direction: column; align-items: center; border-radius: 0 0 20px 20px; box-sizing: border-box; }
+        .stats-row { display: flex; width: 100%; justify-content: space-around; align-items: center; }
+        .stat-value { font-size: 48px; font-weight: 800; color: #00ff88; }
         #timer { color: #ff4444; }
-        #status { font-size: 16px; color: #ffcc00; font-weight: bold; margin-bottom: 10px; height: 20px; }
+        
+        #overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 120px; font-weight: 900; color: #fff; text-shadow: 0 0 20px rgba(0,0,0,0.8); pointer-events: none; z-index: 10; }
+        #status { font-size: 16px; color: #ffcc00; font-weight: bold; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; }
         
         .controls { display: flex; gap: 10px; width: 100%; justify-content: center; }
-        button {
-            padding: 12px 20px; font-size: 14px; font-weight: bold;
-            background: #333; color: white; border: 1px solid #444; border-radius: 8px; cursor: pointer;
-        }
-        #mainBtn { background: #007bff; border: none; flex-grow: 1; max-width: 200px; }
-        .adj-btn { background: #444; width: 45px; }
+        button { padding: 15px 20px; font-size: 14px; font-weight: bold; border: none; border-radius: 12px; cursor: pointer; transition: 0.2s; }
         
+        #calibBtn { background: #6f42c1; color: white; width: 180px; }
+        #calibBtn.active { background: #dc3545; animation: pulse 1s infinite; }
+        #startBtn { background: #007bff; color: white; display: none; width: 180px; }
+        
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
         .hidden { display: none !important; }
-        .bump { transform: scale(1.2); transition: 0.1s; }
     </style>
 </head>
 <body>
@@ -43,52 +35,30 @@
     <div id="container">
         <video id="video" playsinline muted></video>
         <canvas id="output"></canvas>
+        <div id="overlay"></div>
     </div>
 
     <div class="ui-panel">
-        <div id="status">LOADING AI...</div>
+        <div id="status">WAITING FOR CAMERA...</div>
         
-        <div id="setupControls" class="hidden" style="width:100%">
-            <div class="controls" style="margin-bottom: 15px;">
-                <div style="text-align:center">
-                    <div style="font-size:10px; color:#00bfff; margin-bottom:5px;">UP LINE</div>
-                    <button class="adj-btn" onclick="adjustLine('up', -10)">-</button>
-                    <button class="adj-btn" onclick="adjustLine('up', 10)">+</button>
-                </div>
-                <div style="text-align:center; margin-left: 20px;">
-                    <div style="font-size:10px; color:#ff4444; margin-bottom:5px;">DOWN LINE</div>
-                    <button class="adj-btn" onclick="adjustLine('down', -10)">-</button>
-                    <button class="adj-btn" onclick="adjustLine('down', 10)">+</button>
-                </div>
-            </div>
-            <div class="controls">
-                <button id="mainBtn" onclick="startWorkout()">START 60s CHALLENGE</button>
-            </div>
+        <div id="setupUI" class="controls">
+            <button id="calibBtn" onclick="toggleCalibration()">START CALIBRATION</button>
+            <button id="startBtn" onclick="beginWorkoutCountdown()">START CHALLENGE</button>
         </div>
 
-        <div id="workoutUI" class="hidden" style="width:100%">
-            <div class="stats-row">
-                <div class="stat-item">
-                    <div id="timer" class="stat-value">60</div>
-                    <div class="stat-label">Time Left</div>
-                </div>
-                <div class="stat-item">
-                    <div id="counter" class="stat-value">0</div>
-                    <div class="stat-label">Reps</div>
-                </div>
-            </div>
-            <button onclick="location.reload()" style="background:none; border:none; color:#555; text-decoration:underline;">Restart Calibration</button>
+        <div id="workoutUI" class="stats-row hidden">
+            <div style="text-align:center"><div id="timer" class="stat-value">60</div><div style="font-size:10px; color:#888;">SECONDS</div></div>
+            <div style="text-align:center"><div id="counter" class="stat-value">0</div><div style="font-size:10px; color:#888;">REPS</div></div>
         </div>
     </div>
 
     <script>
         let detector, video, canvas, ctx;
-        let count = 0;
-        let timeLeft = 60;
-        let timerInterval;
+        let count = 0, timeLeft = 60, isRunning = false;
+        let upLineY = null, downLineY = null;
+        let isCalibrating = false;
+        let tempMinY = 9999, tempMaxY = 0;
         let stage = "up";
-        let isWorkoutStarted = false;
-        let upLineY, downLineY;
 
         async function init() {
             video = document.getElementById('video');
@@ -100,55 +70,84 @@
                 { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING }
             );
 
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
-                video.srcObject = stream;
-                video.onloadedmetadata = () => {
-                    video.play();
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-                    upLineY = canvas.height * 0.45; 
-                    downLineY = canvas.height * 0.8;
-                    document.getElementById('setupControls').classList.remove('hidden');
-                    document.getElementById('status').innerText = "CALIBRATE LINES";
-                    run();
-                };
-            } catch (e) {
-                document.getElementById('status').innerText = "CAMERA ERROR";
-                alert("Please enable camera permissions.");
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+            video.srcObject = stream;
+            video.onloadedmetadata = () => {
+                video.play();
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                document.getElementById('status').innerText = "READY";
+                run();
+            };
+        }
+
+        function toggleCalibration() {
+            const btn = document.getElementById('calibBtn');
+            if (!isCalibrating) {
+                // Start Recording
+                isCalibrating = true;
+                tempMinY = 9999; tempMaxY = 0;
+                btn.innerText = "STOP & SAVE";
+                btn.classList.add('active');
+                document.getElementById('status').innerText = "DO A FULL REPETITION NOW";
+                document.getElementById('startBtn').style.display = "none";
+            } else {
+                // Stop Recording
+                isCalibrating = false;
+                btn.innerText = "RE-CALIBRATE";
+                btn.classList.remove('active');
+                
+                // Add a small 10% buffer to the detected range
+                const range = tempMaxY - tempMinY;
+                upLineY = tempMinY + (range * 0.1);
+                downLineY = tempMaxY - (range * 0.1);
+                
+                document.getElementById('startBtn').style.display = "block";
+                document.getElementById('status').innerText = "CALIBRATION SAVED";
             }
         }
 
-        function adjustLine(type, amount) {
-            if (type === 'up') upLineY += amount;
-            else downLineY += amount;
+        function beginWorkoutCountdown() {
+            document.getElementById('setupUI').classList.add('hidden');
+            let readyTime = 5;
+            const overlay = document.getElementById('overlay');
+            document.getElementById('status').innerText = "PREPARE!";
+            
+            const countInterval = setInterval(() => {
+                overlay.innerText = readyTime;
+                readyTime--;
+                if (readyTime < 0) {
+                    clearInterval(countInterval);
+                    overlay.innerText = "";
+                    startActualWorkout();
+                }
+            }, 1000);
         }
 
-        function startWorkout() {
-            isWorkoutStarted = true;
+        function startActualWorkout() {
+            isRunning = true;
             count = 0;
             timeLeft = 60;
-            document.getElementById('setupControls').classList.add('hidden');
             document.getElementById('workoutUI').classList.remove('hidden');
+            document.getElementById('status').innerText = "GO GO GO!";
             
-            timerInterval = setInterval(() => {
+            const workoutTimer = setInterval(() => {
                 timeLeft--;
                 document.getElementById('timer').innerText = timeLeft;
                 if (timeLeft <= 0) {
-                    clearInterval(timerInterval);
-                    isWorkoutStarted = false;
-                    document.getElementById('status').innerText = "TIME'S UP!";
-                    document.getElementById('status').style.color = "#ff4444";
+                    clearInterval(workoutTimer);
+                    isRunning = false;
+                    document.getElementById('status').innerText = "WORKOUT COMPLETE";
+                    document.getElementById('status').style.color = "#00ff88";
                 }
             }, 1000);
-            
-            document.getElementById('status').innerText = "GO!";
         }
 
         async function run() {
             const poses = await detector.estimatePoses(video);
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            drawGuidelines();
+            
+            if (upLineY && downLineY) drawLines();
 
             if (poses.length > 0) {
                 const kp = poses[0].keypoints;
@@ -157,12 +156,13 @@
 
                 if (lS.score > 0.4 && rS.score > 0.4) {
                     const shoulderY = (lS.y + rS.y) / 2;
-                    const shoulderX = (lS.x + rS.x) / 2;
 
-                    ctx.fillStyle = shoulderY > downLineY ? "#ff4444" : (shoulderY < upLineY ? "#00ff88" : "#fff");
-                    ctx.beginPath(); ctx.arc(shoulderX, shoulderY, 8, 0, 2 * Math.PI); ctx.fill();
+                    if (isCalibrating) {
+                        if (shoulderY < tempMinY) tempMinY = shoulderY;
+                        if (shoulderY > tempMaxY) tempMaxY = shoulderY;
+                    }
 
-                    if (isWorkoutStarted && timeLeft > 0) {
+                    if (isRunning) {
                         if (shoulderY > downLineY && stage === "up") {
                             stage = "down";
                             document.getElementById('status').innerText = "PUSH UP!";
@@ -170,26 +170,29 @@
                         if (shoulderY < upLineY && stage === "down") {
                             stage = "up";
                             count++;
-                            const cEl = document.getElementById('counter');
-                            cEl.innerText = count;
-                            cEl.classList.add('bump');
-                            setTimeout(() => cEl.classList.remove('bump'), 150);
+                            document.getElementById('counter').innerText = count;
                             document.getElementById('status').innerText = "LOWER DOWN";
                         }
                     }
+                    
+                    // Tracking indicator
+                    ctx.fillStyle = isCalibrating ? "#6f42c1" : "#00ff88";
+                    ctx.beginPath(); ctx.arc((lS.x + rS.x)/2, shoulderY, 10, 0, 2 * Math.PI); ctx.fill();
                 }
             }
             requestAnimationFrame(run);
         }
 
-        function drawGuidelines() {
+        function drawLines() {
             ctx.lineWidth = 4;
-            ctx.setLineDash([10, 5]);
+            // Up Phase Line
             ctx.strokeStyle = "rgba(0, 191, 255, 0.6)";
+            ctx.setLineDash([10, 5]);
             ctx.beginPath(); ctx.moveTo(0, upLineY); ctx.lineTo(canvas.width, upLineY); ctx.stroke();
             
-            ctx.setLineDash([]);
+            // Down Phase Line
             ctx.strokeStyle = "rgba(255, 68, 68, 0.6)";
+            ctx.setLineDash([]);
             ctx.beginPath(); ctx.moveTo(0, downLineY); ctx.lineTo(canvas.width, downLineY); ctx.stroke();
         }
 
